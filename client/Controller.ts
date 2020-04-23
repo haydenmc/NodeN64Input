@@ -33,6 +33,7 @@ class Controller
     private readonly REPORT_HZ: number = 15; // updates per second
     private readonly FPS_INTERVAL: number = 1000 / this.REPORT_HZ;
     private readonly AXIS_PRESSED_THRESHOLD: number = 0.33;
+    private readonly ANALOG_DEADZONE: number = 0.20;
 
     private address: string;
     private gamepadIndex: number;
@@ -175,29 +176,44 @@ class Controller
 
         // First 8 bits is DPAD, Start, Z, B, and A
         let val = 0 >>> 0; // hack for unsigned int
-        val |= (Number(this.n64Buttons.R_DPAD)       << 7)
-        val |= (Number(this.n64Buttons.L_DPAD)       << 6)
-        val |= (Number(this.n64Buttons.D_DPAD)       << 5)
-        val |= (Number(this.n64Buttons.U_DPAD)       << 4)
-        val |= (Number(this.n64Buttons.START_BUTTON) << 3)
-        val |= (Number(this.n64Buttons.Z_TRIG)       << 2)
-        val |= (Number(this.n64Buttons.B_BUTTON)     << 1)
-        val |= (Number(this.n64Buttons.A_BUTTON)    >>> 0)
+        val |= (Number(this.n64Buttons.A_BUTTON)     << 7)
+        val |= (Number(this.n64Buttons.B_BUTTON)     << 6)
+        val |= (Number(this.n64Buttons.Z_TRIG)       << 5)
+        val |= (Number(this.n64Buttons.START_BUTTON) << 4)
+        val |= (Number(this.n64Buttons.U_DPAD)       << 3)
+        val |= (Number(this.n64Buttons.D_DPAD)       << 2)
+        val |= (Number(this.n64Buttons.L_DPAD)       << 1)
+        val |= (Number(this.n64Buttons.R_DPAD)       >>> 0)
         view[0] = val;
 
         // Second 8 bits is C buttons, triggers, and reserved values
         val = 0 >>> 0;
-        val |= (Number(this.n64Buttons.R_CBUTTON) << 7)
-        val |= (Number(this.n64Buttons.L_CBUTTON) << 6)
-        val |= (Number(this.n64Buttons.D_CBUTTON) << 5)
-        val |= (Number(this.n64Buttons.U_CBUTTON) << 4)
-        val |= (Number(this.n64Buttons.R_TRIG)    << 3)
-        val |= (Number(this.n64Buttons.L_TRIG)    << 2)
+        val |= (Number(this.n64Buttons.L_TRIG)    << 5)
+        val |= (Number(this.n64Buttons.R_TRIG)    << 4)
+        val |= (Number(this.n64Buttons.U_CBUTTON) << 3)
+        val |= (Number(this.n64Buttons.D_CBUTTON) << 2)
+        val |= (Number(this.n64Buttons.L_CBUTTON) << 1)
+        val |= (Number(this.n64Buttons.R_CBUTTON) >>> 0)
         view[1] = val;
 
-        // Final 2 bytes are analog sticks.
-        view[2] = (((this.n64Buttons.X_AXIS + 1.0) / 2.0) * 255) // X axis
-        view[3] = (((this.n64Buttons.Y_AXIS + 1.0) / 2.0) * 255) // Y axis
+        // Final 2 bytes are analog sticks which are stored as signed chars,
+        // so we need to finagle them into unsigned chars
+        let xAxis: number = 0;
+        let yAxis: number = 0;
+
+        if (Math.abs(this.n64Buttons.X_AXIS) > this.ANALOG_DEADZONE)
+        {
+            xAxis = ((this.n64Buttons.X_AXIS / 1.0) * 127);
+        }
+        if (Math.abs(this.n64Buttons.Y_AXIS) > this.ANALOG_DEADZONE)
+        {
+            yAxis = ((this.n64Buttons.Y_AXIS / 1.0) * -127);
+        }
+
+
+
+        view[2] = xAxis; // X axis
+        view[3] = yAxis; // Y axis (invert)
 
         return buffer;
     }
