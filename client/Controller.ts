@@ -75,7 +75,7 @@ class Controller
                 X_AXIS:       0,
                 Y_AXIS:       0
             };
-        this.wuSocket = new WuSocket(address);
+        this.wuSocket = new WuSocket(this.address);
 
         window.addEventListener(
             "gamepadconnected",
@@ -99,6 +99,7 @@ class Controller
         if (!this.gamepadActive)
         {
             this.gamepadActive = true;
+            document.querySelector("div.controller")?.classList.remove("waiting");
             window.requestAnimationFrame(() => this.queryGamepadState());
         }
     }
@@ -162,11 +163,66 @@ class Controller
                 Y_AXIS:       gamepad.axes[1].valueOf()  // Xbox R analog
             };
 
+        // Update our visual
+        let controllerVisual = document.querySelector(".controller svg") as SVGElement;
+        if (controllerVisual)
+        {
+            this.updateControllerVisuals(this.n64Buttons, controllerVisual);
+        }
+
         let buffer = this.buttonsToBuffer(this.n64Buttons);
         let bufferView = new Uint8Array(buffer);
 
         console.log("buffer: %d %d %d %d", bufferView[0], bufferView[1], bufferView[2], bufferView[3]);
         this.wuSocket.sendBuffer(buffer);
+    }
+
+    private updateControllerVisuals(buttons: Buttons, controllerSvgElement: SVGElement): void
+    {
+        // Analog stick
+        let analogStick: SVGPathElement = controllerSvgElement.querySelector("#analogStick") as SVGPathElement;
+        analogStick.style.transform = `translate(${buttons.X_AXIS * 3}px, ${buttons.Y_AXIS * 3}px)`;
+        if ((Math.abs(buttons.X_AXIS) > this.ANALOG_DEADZONE) || (Math.abs(buttons.Y_AXIS) > this.ANALOG_DEADZONE))
+        {
+            analogStick.style.fill = "var(--button-highlight-color)";
+        }
+        else
+        {
+            analogStick.style.fill = "#ffffff";
+        }
+
+        // Buttons!
+        this.updateButtonVisual(buttons.R_DPAD,       controllerSvgElement, "dpadRight"    );
+        this.updateButtonVisual(buttons.L_DPAD,       controllerSvgElement, "dpadLeft"     );
+        this.updateButtonVisual(buttons.D_DPAD,       controllerSvgElement, "dpadDown"     );
+        this.updateButtonVisual(buttons.U_DPAD,       controllerSvgElement, "dpadUp"       );
+        this.updateButtonVisual(buttons.START_BUTTON, controllerSvgElement, "startButton"  );
+        this.updateButtonVisual(buttons.Z_TRIG,       controllerSvgElement, "zButton"      );
+        this.updateButtonVisual(buttons.B_BUTTON,     controllerSvgElement, "bButton"      );
+        this.updateButtonVisual(buttons.A_BUTTON,     controllerSvgElement, "aButton"      );
+        this.updateButtonVisual(buttons.R_CBUTTON,    controllerSvgElement, "cRightButton" );
+        this.updateButtonVisual(buttons.L_CBUTTON,    controllerSvgElement, "cLeftButton"  );
+        this.updateButtonVisual(buttons.D_CBUTTON,    controllerSvgElement, "cDownButton"  );
+        this.updateButtonVisual(buttons.U_CBUTTON,    controllerSvgElement, "cUpButton"    );
+        this.updateButtonVisual(buttons.R_TRIG,       controllerSvgElement, "rightShoulder");
+        this.updateButtonVisual(buttons.L_TRIG,       controllerSvgElement, "leftShoulder" );
+    }
+
+    private updateButtonVisual(buttonPressed: boolean, controllerElement: SVGElement, buttonVisualId: string): void
+    {
+        let buttonVisual = controllerElement.querySelector(`#${buttonVisualId}`) as SVGElement;
+        if (!buttonVisual)
+        {
+            return;
+        }
+        if (buttonPressed)
+        {
+            buttonVisual.style.fill = "var(--button-highlight-color)";
+        }
+        else
+        {
+            buttonVisual.style.fill = "none";
+        }
     }
 
     private buttonsToBuffer(n64Buttons: Buttons): ArrayBuffer
@@ -209,8 +265,6 @@ class Controller
         {
             yAxis = ((this.n64Buttons.Y_AXIS / 1.0) * -127);
         }
-
-
 
         view[2] = xAxis; // X axis
         view[3] = yAxis; // Y axis (invert)

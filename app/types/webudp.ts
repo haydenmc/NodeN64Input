@@ -1,11 +1,11 @@
 import dgram from 'dgram';
 
-export default interface WebUdp
+export interface WebUdp
 {
     Host: WebUdpHost;
 }
 
-interface WebUdpHost
+export interface WebUdpHost
 {
     new(hostname: string, port: number, options: WebUdpHostOptions): WebUdpHost;
 
