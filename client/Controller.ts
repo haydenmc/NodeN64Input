@@ -30,6 +30,7 @@ interface Buttons
 
 class Controller
 {
+    private readonly MIXER_CHANNEL: string = "Mixperiments";
     private readonly REPORT_HZ: number = 15; // updates per second
     private readonly FPS_INTERVAL: number = 1000 / this.REPORT_HZ;
     private readonly AXIS_PRESSED_THRESHOLD: number = 0.33;
@@ -85,6 +86,34 @@ class Controller
                     this.selectGamepad(gamepadEvent.gamepad);
                 }
         );
+
+        this.initMixer();
+        this.bindElements();
+    }
+
+    private bindElements(): void
+    {
+        document.querySelector("button.refreshMixer")?.addEventListener("click", (e) => {
+            e.preventDefault();
+            this.refreshMixer();
+        });
+    }
+
+    private initMixer(): void
+    {
+        var iFrameElement = document.querySelector("iframe") as HTMLIFrameElement;
+        iFrameElement.src = `https://mixer.com/embed/player/${this.MIXER_CHANNEL}?muted=0`;
+    }
+
+    private refreshMixer(): void
+    {
+        var iFrameElement = document.querySelector("iframe") as HTMLIFrameElement;
+        if (iFrameElement)
+        {
+            let tmp = iFrameElement.src;
+            iFrameElement.src = "";
+            iFrameElement.src = tmp;
+        }
     }
 
     private selectGamepad(gamepad: Gamepad): void
@@ -171,9 +200,6 @@ class Controller
         }
 
         let buffer = this.buttonsToBuffer(this.n64Buttons);
-        let bufferView = new Uint8Array(buffer);
-
-        console.log("buffer: %d %d %d %d", bufferView[0], bufferView[1], bufferView[2], bufferView[3]);
         this.wuSocket.sendBuffer(buffer);
     }
 

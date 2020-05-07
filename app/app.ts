@@ -1,10 +1,13 @@
+import fs from 'fs';
 import express from 'express';
+import https from 'https';
 import dgram from 'dgram';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import {WebUdp, WebUdpHost} from './types/webudp';
 const WebUDP: WebUdp = require("../lib/WebUDP.node");
 
+const MIXERCHANNEL = "Mixperiments";
 const HOST = "206.55.174.75";
 const PORT = 9000;
 const CONTROL_PORT = 9001;
@@ -22,6 +25,7 @@ interface UdpClient
 
 class App
 {
+    private httpsServer: https.Server;
     private host: string;
     private port: number;
     private emulatorInputPort: number;
@@ -32,8 +36,18 @@ class App
 
     private udpClients: Map<string, UdpClient>;
 
-    constructor(host: string, port: number, emulatorInputPort: number, maxClients: number = 512)
+    constructor(
+        host: string,
+        port: number,
+        emulatorInputPort: number,
+        maxClients: number = 512,
+        keyFilePath: string,
+        certFilePath: string)
     {
+        let creds = {
+            key: fs.readFileSync(keyFilePath),
+            cert: fs.readFileSync(certFilePath)
+        };
         this.host = host;
         this.port = port;
         this.emulatorInputPort = emulatorInputPort;
@@ -44,6 +58,9 @@ class App
         this.udpSocket = dgram.createSocket("udp4");
         this.webUdpHost = this.initWebUdp();
         this.expressApp = this.initExpress();
+        this.httpsServer = https.createServer(creds, this.expressApp);
+
+        this.httpsServer.listen(PORT);
     }
 
     private initWebUdp(): WebUdpHost
@@ -124,14 +141,6 @@ class App
                 }
             
                 res.send(sdp); 
-            }
-        );
-
-        returnVal.listen(
-            this.port,
-            () =>
-            {
-                console.log('Example app listening on port ' + PORT + '!');
             }
         );
 
@@ -256,4 +265,24 @@ class App
     }
 }
 
-var application = new App(HOST, PORT, CONTROL_PORT, MAX_CLIENTS);
+let keyFilePath = null;
+let certFilePath = null;
+var args = process.argv.slice(2);
+for (let i = 0; i < args.length; ++i)
+{
+    if ((args[i] === "--key") && ((i + 1) < args.length))
+    {
+        keyFilePath = args[i + 1];
+    }
+    else if ((args[i] === "--cert") && ((i + 1) < args.length))
+    {
+        certFilePath = args[i + 1];
+    }
+}
+
+if ((keyFilePath === null) || (certFilePath === null))
+{
+    throw "Must specify --key and --cert for HTTPS";
+}
+
+var application = new App(HOST, PORT, CONTROL_PORT, MAX_CLIENTS, keyFilePath, certFilePath);
