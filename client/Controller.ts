@@ -1,123 +1,197 @@
-import WuSocket from "./WuSocket.js";
+import { DefaultBindings } from "./Bindings.js";
 
-interface Buttons
+export enum N64ButtonKind
 {
-    R_DPAD:       boolean;
-    L_DPAD:       boolean;
-    D_DPAD:       boolean;
-    U_DPAD:       boolean;
-
-    START_BUTTON: boolean;
-
-    Z_TRIG:       boolean;
-    B_BUTTON:     boolean;
-    A_BUTTON:     boolean;
-
-    R_CBUTTON:    boolean;
-    L_CBUTTON:    boolean;
-    D_CBUTTON:    boolean;
-    U_CBUTTON:    boolean;
-
-    R_TRIG:       boolean;
-    L_TRIG:       boolean;
-
-    Reserved1:    boolean;
-    Reserved2:    boolean;
-
-    X_AXIS:       number;
-    Y_AXIS:       number;
+    R_DPAD = 0,
+    L_DPAD,
+    D_DPAD,
+    U_DPAD,
+    START_BUTTON,
+    Z_TRIG,
+    B_BUTTON,
+    A_BUTTON,
+    R_CBUTTON,
+    L_CBUTTON,
+    D_CBUTTON,
+    U_CBUTTON,
+    R_TRIG,
+    L_TRIG,
+    Reserved1,
+    Reserved2,
+    LAST,
 }
 
-class Controller
+export enum ControlBindingKind
 {
-    private readonly MIXER_CHANNEL: string = "Mixperiments";
-    private readonly REPORT_HZ: number = 15; // updates per second
-    private readonly FPS_INTERVAL: number = 1000 / this.REPORT_HZ;
-    private readonly AXIS_PRESSED_THRESHOLD: number = 0.33;
-    private readonly ANALOG_DEADZONE: number = 0.20;
+    KeyboardKey = 0,
+    ControllerButton,
+    ControllerAxis,
+    LAST
+}
 
-    private address: string;
+export enum ControlButtonBindingAxisDirection
+{
+    Positive = 0,
+    Negative,
+    LAST
+}
+
+export interface ControlButtonBinding
+{
+    kind: ControlBindingKind;
+    keyboardKey?: string;
+    controllerButtonIndex?: number;
+    pressedValueThreshold?: number;
+    controllerAxisIndex?: number;
+    controllerAxisDirection?: ControlButtonBindingAxisDirection;
+}
+
+export interface ControllerBindings
+{
+    buttonBindings: Map<N64ButtonKind, Array<ControlButtonBinding>>;
+    analogAxisBindings: Map<number, Array<ControlButtonBinding>>;
+}
+
+export interface Buttons
+{
+    buttons: Map<N64ButtonKind, boolean>;
+    xAxis:   number;
+    yAxis:   number;
+}
+
+export class Controller
+{
+    public get N64Buttons(): Buttons {
+        return this.n64Buttons;
+    }
+
+    private static readonly AXIS_PRESSED_THRESHOLD: number = 0.33;
+    private static readonly ANALOG_DEADZONE: number = 0.20;
+
+    // private address: string;
     private gamepadIndex: number;
     private gamepadActive: boolean;
-    private lastQueryTime: number;
+    
     private n64Buttons: Buttons;
-    private wuSocket: WuSocket;
+    private controllerBindings: ControllerBindings;
+    private keysPressed: Set<string>;
 
-    constructor(address: string)
+    constructor()
     {
-        this.address = address;
         this.gamepadIndex = -1;
         this.gamepadActive = false;
-        this.lastQueryTime = 0;
         this.n64Buttons = 
             {
-                R_DPAD:       false,
-                L_DPAD:       false,
-                D_DPAD:       false,
-                U_DPAD:       false,
-
-                START_BUTTON: false,
-
-                Z_TRIG:       false,
-                B_BUTTON:     false,
-                A_BUTTON:     false,
-
-                R_CBUTTON:    false,
-                L_CBUTTON:    false,
-                D_CBUTTON:    false,
-                U_CBUTTON:    false,
-
-                R_TRIG:       false,
-                L_TRIG:       false,
-
-                Reserved1:    false,
-                Reserved2:    false,
-
-                X_AXIS:       0,
-                Y_AXIS:       0
+                buttons: new Map<N64ButtonKind, boolean>(),
+                xAxis: 0,
+                yAxis: 0
             };
-        this.wuSocket = new WuSocket(this.address);
-
+        for (let i = 0 as N64ButtonKind; i < N64ButtonKind.LAST; ++i)
+        {
+            this.n64Buttons.buttons.set(i, false);
+        }
+        this.controllerBindings = 
+            {
+                buttonBindings: new Map(),
+                analogAxisBindings: new Map()
+            };
+        this.keysPressed = new Set<string>();
+        
+        //
+        window.addEventListener(
+            "keydown",
+            (e) => 
+                {
+                    this.onKeyDown(e);
+                }
+        );
+        window.addEventListener(
+            "keyup",
+            (e) =>
+                {
+                    this.onKeyUp(e);
+                }
+        );
         window.addEventListener(
             "gamepadconnected",
             (e) =>
                 {
-                    let gamepadEvent = e as GamepadEvent;
-                    this.selectGamepad(gamepadEvent.gamepad);
+                    this.onGamepadConnected(e as GamepadEvent);
+                }
+        );
+        window.addEventListener(
+            "gamepaddisconnected",
+            (e) =>
+                {
+                    this.onGamepadDisconnected(e as GamepadEvent);
                 }
         );
 
-        this.initMixer();
-        this.bindElements();
+        this.assignDefaultBindings();
     }
 
-    private bindElements(): void
+    private clearBindings(): void
     {
-        document.querySelector("button.refreshMixer")?.addEventListener("click", (e) => {
-            e.preventDefault();
-            this.refreshMixer();
-        });
+        this.controllerBindings.buttonBindings.clear();
+        this.controllerBindings.analogAxisBindings.clear();
     }
 
-    private initMixer(): void
+    private assignDefaultBindings(): void
     {
-        var iFrameElement = document.querySelector("iframe") as HTMLIFrameElement;
-        iFrameElement.src = `https://mixer.com/embed/player/${this.MIXER_CHANNEL}?muted=0`;
+        this.loadBindings(DefaultBindings.DefaultKeyboardBindings);
+        this.loadBindings(DefaultBindings.DefaultControllerBindings);
     }
 
-    private refreshMixer(): void
+    private loadBindings(bindings: ControllerBindings): void
     {
-        var iFrameElement = document.querySelector("iframe") as HTMLIFrameElement;
-        if (iFrameElement)
+        // Load button bindings
+        for (let button of bindings.buttonBindings.keys())
         {
-            let tmp = iFrameElement.src;
-            iFrameElement.src = "";
-            iFrameElement.src = tmp;
+            let newBindings = bindings.buttonBindings.get(button) as ControlButtonBinding[];
+            if (!(this.controllerBindings.buttonBindings.has(button)))
+            {
+                this.controllerBindings.buttonBindings.set(button, new Array());
+            }
+            let currentBindings = 
+                this.controllerBindings.buttonBindings.get(button) as 
+                Array<ControlButtonBinding>;
+            currentBindings.push(...newBindings);
+        }
+
+        // Load analog axes bindings
+        for (let axis of bindings.analogAxisBindings.keys())
+        {
+            let newBindings = bindings.analogAxisBindings.get(axis) as ControlButtonBinding[];
+            if (!(this.controllerBindings.analogAxisBindings.has(axis)))
+            {
+                this.controllerBindings.analogAxisBindings.set(axis, new Array());
+            }
+            let currentBindings = 
+                this.controllerBindings.analogAxisBindings.get(axis) as 
+                Array<ControlButtonBinding>;
+            currentBindings.push(...newBindings);
         }
     }
 
-    private selectGamepad(gamepad: Gamepad): void
+    private onKeyDown(event: KeyboardEvent): void
     {
+        if (!this.keysPressed.has(event.key))
+        {
+            this.keysPressed.add(event.key)
+        }
+    }
+
+    private onKeyUp(event: KeyboardEvent): void
+    {
+        if (this.keysPressed.has(event.key))
+        {
+            this.keysPressed.delete(event.key);
+        }
+    }
+
+    private onGamepadConnected(event: GamepadEvent): void
+    {
+        let gamepad = event.gamepad;
         if (gamepad === null)
         {
             console.warn("null gamepad");
@@ -128,154 +202,206 @@ class Controller
         if (!this.gamepadActive)
         {
             this.gamepadActive = true;
-            document.querySelector("div.controller")?.classList.remove("waiting");
-            window.requestAnimationFrame(() => this.queryGamepadState());
         }
     }
 
-    private queryGamepadState(): void
+    private onGamepadDisconnected(event: GamepadEvent): void
     {
-        if (!this.gamepadActive)
-        {
-            return;
-        }
+        // todo
+    }
 
-        window.requestAnimationFrame(() => this.queryGamepadState());
-
-        let now = Date.now();
-        let elapsed = now - this.lastQueryTime;
-
-        if (elapsed > this.FPS_INTERVAL)
+    public UpdateControllerState(): void
+    {
+        // Do we have a gamepad connected?
+        let activeGamepad: Gamepad | null = null;
+        if (this.gamepadActive)
         {
             let gamepads = navigator.getGamepads();
-            if ((this.gamepadIndex > gamepads.length) ||
-                (gamepads[this.gamepadIndex] === null))
+            if (gamepads !== null)
             {
-                this.gamepadActive = false;
+                for (let gamepad of gamepads)
+                {
+                    if (gamepad?.index === this.gamepadIndex)
+                    {
+                        activeGamepad = gamepad;
+                        break;
+                    }
+                }
             }
-            else
+        }
+        // Reset all button values
+        for (let i = 0 as N64ButtonKind; i < N64ButtonKind.LAST; ++i)
+        {
+            this.n64Buttons.buttons.set(i, false);
+        }
+        // Set buttons per bindings
+        for (let n64Button of this.controllerBindings.buttonBindings.keys())
+        {
+            let bindings = this.controllerBindings.buttonBindings.get(n64Button) as ControlButtonBinding[];
+            let buttonValue = false;
+            for (let binding of bindings)
             {
-                this.sendGamepadState(gamepads[this.gamepadIndex] as Gamepad);
+                let bindingValue = false;
+                switch (binding.kind)
+                {
+                    case ControlBindingKind.KeyboardKey:
+                        bindingValue = this.keysPressed.has(binding.keyboardKey as string);
+                        break;
+                    case ControlBindingKind.ControllerButton:
+                        if (activeGamepad)
+                        {
+                            bindingValue = 
+                                activeGamepad.buttons[binding.controllerButtonIndex as number].value >= 
+                                (binding.pressedValueThreshold as number);
+                        }
+                        break;
+                    case ControlBindingKind.ControllerAxis:
+                        if (activeGamepad)
+                        {
+                            if (binding.controllerAxisDirection == 
+                                ControlButtonBindingAxisDirection.Positive)
+                            {
+                                bindingValue = 
+                                    activeGamepad.axes[binding.controllerAxisIndex as number].valueOf() >= 
+                                    (binding.pressedValueThreshold as number);
+                            }
+                            else
+                            {
+                                bindingValue = 
+                                    activeGamepad.axes[binding.controllerAxisIndex as number].valueOf() <= 
+                                    -(binding.pressedValueThreshold as number);
+                            }
+                        }
+                        break;
+                    default:
+                        console.warn(`Unexpected button binding ${binding.kind} ` + 
+                            `for button ${n64Button}`);
+                }
+                buttonValue = (buttonValue || bindingValue);
             }
-            this.lastQueryTime = now - (elapsed % this.FPS_INTERVAL);
+            this.n64Buttons.buttons.set(n64Button, buttonValue);
         }
-    }
 
-    private sendGamepadState(gamepad: Gamepad): void
-    {
-        // Map values
-        this.n64Buttons = 
+        // Set axes per bindings
+        // N64 only has two axes (1 analog stick)
+        for (let axis of this.controllerBindings.analogAxisBindings.keys())
+        {
+            let bindings = this.controllerBindings.analogAxisBindings.get(axis) as ControlButtonBinding[];
+            let bindingValue = 0.0;
+            for (let binding of bindings)
             {
-                R_DPAD:       gamepad.buttons[15].pressed, // Xbox dpad right
-                L_DPAD:       gamepad.buttons[14].pressed, // Xbox dpad left
-                D_DPAD:       gamepad.buttons[13].pressed, // Xbox dpad down
-                U_DPAD:       gamepad.buttons[12].pressed, // Xbox dpad up
-
-                START_BUTTON: gamepad.buttons[9].pressed,  // Xbox menu
-
-                Z_TRIG:       gamepad.buttons[5].pressed,  // Xbox RB
-                B_BUTTON:     gamepad.buttons[2].pressed,  // Xbox X
-                A_BUTTON:     gamepad.buttons[0].pressed,  // Xbox A
-
-                R_CBUTTON:    (gamepad.axes[2].valueOf() >  this.AXIS_PRESSED_THRESHOLD), // Xbox R analog
-                L_CBUTTON:    (gamepad.axes[2].valueOf() < -this.AXIS_PRESSED_THRESHOLD), // Xbox R analog
-                D_CBUTTON:    (gamepad.axes[3].valueOf() >  this.AXIS_PRESSED_THRESHOLD), // Xbox R analog
-                U_CBUTTON:    (gamepad.axes[3].valueOf() < -this.AXIS_PRESSED_THRESHOLD), // Xbox R analog
-
-                R_TRIG:       (gamepad.buttons[7].value > this.AXIS_PRESSED_THRESHOLD), // Xbox RT
-                L_TRIG:       (gamepad.buttons[6].value > this.AXIS_PRESSED_THRESHOLD), // Xbox LT
-
-                Reserved1:    false,
-                Reserved2:    false,
-
-                X_AXIS:       gamepad.axes[0].valueOf(), // Xbox L analog
-                Y_AXIS:       gamepad.axes[1].valueOf()  // Xbox R analog
-            };
-
-        // Update our visual
-        let controllerVisual = document.querySelector(".controller svg") as SVGElement;
-        if (controllerVisual)
-        {
-            this.updateControllerVisuals(this.n64Buttons, controllerVisual);
-        }
-
-        let buffer = this.buttonsToBuffer(this.n64Buttons);
-        this.wuSocket.sendBuffer(buffer);
-    }
-
-    private updateControllerVisuals(buttons: Buttons, controllerSvgElement: SVGElement): void
-    {
-        // Analog stick
-        let analogStick: SVGPathElement = controllerSvgElement.querySelector("#analogStick") as SVGPathElement;
-        analogStick.style.transform = `translate(${buttons.X_AXIS * 3}px, ${buttons.Y_AXIS * 3}px)`;
-        if ((Math.abs(buttons.X_AXIS) > this.ANALOG_DEADZONE) || (Math.abs(buttons.Y_AXIS) > this.ANALOG_DEADZONE))
-        {
-            analogStick.style.fill = "var(--button-highlight-color)";
-        }
-        else
-        {
-            analogStick.style.fill = "#ffffff";
-        }
-
-        // Buttons!
-        this.updateButtonVisual(buttons.R_DPAD,       controllerSvgElement, "dpadRight"    );
-        this.updateButtonVisual(buttons.L_DPAD,       controllerSvgElement, "dpadLeft"     );
-        this.updateButtonVisual(buttons.D_DPAD,       controllerSvgElement, "dpadDown"     );
-        this.updateButtonVisual(buttons.U_DPAD,       controllerSvgElement, "dpadUp"       );
-        this.updateButtonVisual(buttons.START_BUTTON, controllerSvgElement, "startButton"  );
-        this.updateButtonVisual(buttons.Z_TRIG,       controllerSvgElement, "zButton"      );
-        this.updateButtonVisual(buttons.B_BUTTON,     controllerSvgElement, "bButton"      );
-        this.updateButtonVisual(buttons.A_BUTTON,     controllerSvgElement, "aButton"      );
-        this.updateButtonVisual(buttons.R_CBUTTON,    controllerSvgElement, "cRightButton" );
-        this.updateButtonVisual(buttons.L_CBUTTON,    controllerSvgElement, "cLeftButton"  );
-        this.updateButtonVisual(buttons.D_CBUTTON,    controllerSvgElement, "cDownButton"  );
-        this.updateButtonVisual(buttons.U_CBUTTON,    controllerSvgElement, "cUpButton"    );
-        this.updateButtonVisual(buttons.R_TRIG,       controllerSvgElement, "rightShoulder");
-        this.updateButtonVisual(buttons.L_TRIG,       controllerSvgElement, "leftShoulder" );
-    }
-
-    private updateButtonVisual(buttonPressed: boolean, controllerElement: SVGElement, buttonVisualId: string): void
-    {
-        let buttonVisual = controllerElement.querySelector(`#${buttonVisualId}`) as SVGElement;
-        if (!buttonVisual)
-        {
-            return;
-        }
-        if (buttonPressed)
-        {
-            buttonVisual.style.fill = "var(--button-highlight-color)";
-        }
-        else
-        {
-            buttonVisual.style.fill = "none";
+                switch (binding.kind)
+                {
+                    case ControlBindingKind.ControllerAxis:
+                        if (activeGamepad)
+                        {
+                            let axisIndex = binding.controllerAxisIndex as number;
+                            if (axisIndex < activeGamepad.axes.length)
+                            {
+                                bindingValue += activeGamepad.axes[axisIndex].valueOf();
+                            }
+                            else
+                            {
+                                console.warn(`Gamepad ${activeGamepad.id} has no axis ` + 
+                                    `${axisIndex} - only ` + 
+                                    `${activeGamepad.axes.length} axes available.`);
+                            }
+                        }
+                        break;
+                    case ControlBindingKind.ControllerButton:
+                        if (activeGamepad)
+                        {
+                            let buttonIndex = binding.controllerButtonIndex as number;
+                            if (buttonIndex < activeGamepad.buttons.length)
+                            {
+                                if (binding.controllerAxisDirection === ControlButtonBindingAxisDirection.Positive)
+                                {
+                                    bindingValue += activeGamepad.buttons[buttonIndex].value;
+                                }
+                                else
+                                {
+                                    bindingValue += -1 * (activeGamepad.buttons[buttonIndex].value);
+                                }
+                            }
+                            else
+                            {
+                                console.warn(`Gamepad ${activeGamepad.id} has no button ` + 
+                                    `${buttonIndex} - only ` + 
+                                    `${activeGamepad.buttons.length} buttons available.`);
+                            }
+                        }
+                        break;
+                    case ControlBindingKind.KeyboardKey:
+                        if (this.keysPressed.has(binding.keyboardKey as string))
+                        {
+                            if (binding.controllerAxisDirection === ControlButtonBindingAxisDirection.Positive)
+                            {
+                                bindingValue += 1.0; // TODO: ramp up over time?
+                            }
+                            else if (binding.controllerAxisDirection === ControlButtonBindingAxisDirection.Negative)
+                            {
+                                bindingValue += -1.0; // TODO: ramp up over time?
+                            }
+                        }
+                        break;
+                    default:
+                        console.warn(`Unexpected axis binding ${binding.kind} ` + 
+                            `for axis ${axis}`);
+                        break;
+                }
+            }
+            if (axis === 0)
+            {
+                this.n64Buttons.xAxis = bindingValue;
+            }
+            else if (axis === 1)
+            {
+                this.n64Buttons.yAxis = bindingValue;
+            }
         }
     }
 
-    private buttonsToBuffer(n64Buttons: Buttons): ArrayBuffer
+    public static ButtonsToBuffer(n64Buttons: Buttons): ArrayBuffer
     {
         let buffer = new ArrayBuffer(32);
         let view = new Uint8Array(buffer);
 
         // First 8 bits is DPAD, Start, Z, B, and A
+        let ab = n64Buttons.buttons.get(N64ButtonKind.A_BUTTON    ) as boolean;
+        let bb = n64Buttons.buttons.get(N64ButtonKind.B_BUTTON    ) as boolean;
+        let zb = n64Buttons.buttons.get(N64ButtonKind.Z_TRIG      ) as boolean;
+        let sb = n64Buttons.buttons.get(N64ButtonKind.START_BUTTON) as boolean;
+        let du = n64Buttons.buttons.get(N64ButtonKind.U_DPAD      ) as boolean;
+        let dd = n64Buttons.buttons.get(N64ButtonKind.D_DPAD      ) as boolean;
+        let dl = n64Buttons.buttons.get(N64ButtonKind.L_DPAD      ) as boolean;
+        let dr = n64Buttons.buttons.get(N64ButtonKind.R_DPAD      ) as boolean;
+
         let val = 0 >>> 0; // hack for unsigned int
-        val |= (Number(this.n64Buttons.A_BUTTON)     << 7)
-        val |= (Number(this.n64Buttons.B_BUTTON)     << 6)
-        val |= (Number(this.n64Buttons.Z_TRIG)       << 5)
-        val |= (Number(this.n64Buttons.START_BUTTON) << 4)
-        val |= (Number(this.n64Buttons.U_DPAD)       << 3)
-        val |= (Number(this.n64Buttons.D_DPAD)       << 2)
-        val |= (Number(this.n64Buttons.L_DPAD)       << 1)
-        val |= (Number(this.n64Buttons.R_DPAD)       >>> 0)
+        val |= (Number(ab)  << 7)
+        val |= (Number(bb)  << 6)
+        val |= (Number(zb)  << 5)
+        val |= (Number(sb)  << 4)
+        val |= (Number(du)  << 3)
+        val |= (Number(dd)  << 2)
+        val |= (Number(dl)  << 1)
+        val |= (Number(dr) >>> 0)
         view[0] = val;
 
         // Second 8 bits is C buttons, triggers, and reserved values
+        let lt = n64Buttons.buttons.get(N64ButtonKind.L_TRIG   ) as boolean;
+        let rt = n64Buttons.buttons.get(N64ButtonKind.R_TRIG   ) as boolean;
+        let cu = n64Buttons.buttons.get(N64ButtonKind.U_CBUTTON) as boolean;
+        let cd = n64Buttons.buttons.get(N64ButtonKind.D_CBUTTON) as boolean;
+        let cl = n64Buttons.buttons.get(N64ButtonKind.L_CBUTTON) as boolean;
+        let cr = n64Buttons.buttons.get(N64ButtonKind.R_CBUTTON) as boolean;
+
         val = 0 >>> 0;
-        val |= (Number(this.n64Buttons.L_TRIG)    << 5)
-        val |= (Number(this.n64Buttons.R_TRIG)    << 4)
-        val |= (Number(this.n64Buttons.U_CBUTTON) << 3)
-        val |= (Number(this.n64Buttons.D_CBUTTON) << 2)
-        val |= (Number(this.n64Buttons.L_CBUTTON) << 1)
-        val |= (Number(this.n64Buttons.R_CBUTTON) >>> 0)
+        val |= (Number(lt)  << 5)
+        val |= (Number(rt)  << 4)
+        val |= (Number(cu)  << 3)
+        val |= (Number(cd)  << 2)
+        val |= (Number(cl)  << 1)
+        val |= (Number(cr) >>> 0)
         view[1] = val;
 
         // Final 2 bytes are analog sticks which are stored as signed chars,
@@ -283,13 +409,13 @@ class Controller
         let xAxis: number = 0;
         let yAxis: number = 0;
 
-        if (Math.abs(this.n64Buttons.X_AXIS) > this.ANALOG_DEADZONE)
+        if (Math.abs(n64Buttons.xAxis) > Controller.ANALOG_DEADZONE)
         {
-            xAxis = ((this.n64Buttons.X_AXIS / 1.0) * 127);
+            xAxis = ((n64Buttons.xAxis / 1.0) * 127);
         }
-        if (Math.abs(this.n64Buttons.Y_AXIS) > this.ANALOG_DEADZONE)
+        if (Math.abs(n64Buttons.yAxis) > Controller.ANALOG_DEADZONE)
         {
-            yAxis = ((this.n64Buttons.Y_AXIS / 1.0) * -127);
+            yAxis = ((n64Buttons.yAxis / 1.0) * -127);
         }
 
         view[2] = xAxis; // X axis
@@ -298,5 +424,3 @@ class Controller
         return buffer;
     }
 }
-
-new Controller(window.location.protocol + "//" + window.location.hostname + ":" + window.location.port);
