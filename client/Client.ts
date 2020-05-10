@@ -8,6 +8,34 @@ enum ConnectionState
     Playing
 }
 
+enum ClientRequestKind
+{
+    EnterQueue = 0,
+    Leave = 1
+}
+
+interface ClientRequest
+{
+    requestKind: ClientRequestKind
+}
+
+enum ServerEventKind
+{
+    Error = 0,
+    QueueUpdate = 1,
+    YouArePlaying = 2,
+    Dropped = 3
+}
+
+interface ServerEvent
+{
+    eventKind: ServerEventKind,
+    messageId: number,
+    queuePosition?: number,
+    controllerNumber?: number,
+    expirationTime?: string
+}
+
 export default class Client
 {
     public static get Current(): Client
@@ -30,6 +58,8 @@ export default class Client
 
     private wuSocket: WuSocket;
     private connectionState: ConnectionState;
+    private expirationTime: Date | null;
+    private expirationUpdateTimer: number;
     
     constructor()
     {
@@ -37,8 +67,13 @@ export default class Client
         this.wuSocket = new WuSocket(
             `${window.location.protocol}//${window.location.hostname}:${window.location.port}`);
         this.connectionState = ConnectionState.Disconnected;
+        this.expirationTime = null;
+        this.expirationUpdateTimer = -1;
         this.wuSocket.OnOpen = () => {
-            this.connectionState = ConnectionState.Connected;
+            this.onWuSocketOpen();
+        };
+        this.wuSocket.OnMessage = (messageEvent: MessageEvent) => {
+            this.onWuSocketMessage(messageEvent);
         };
         this.lastUpdateTime = 0;
     }
@@ -46,13 +81,127 @@ export default class Client
     public Start(): void
     {
         this.bindElements();
-        this.initMixer();
+        if (!(window.location.hash.includes("nomixer")))
+        {
+            this.initMixer();
+        }
         window.requestAnimationFrame(() => this.onFrame());
+    }
+
+    private updateStatus(message: string): void
+    {
+        let statusPane = document.querySelector("div#status .main");
+        if (statusPane)
+        {
+            statusPane.innerHTML = message;
+        }
+    }
+
+    private updateSubStatus(message: string): void
+    {
+        let subStatusPane = document.querySelector("div#status .sub");
+        if (subStatusPane)
+        {
+            subStatusPane.innerHTML = message;
+        }
     }
 
     private join(): void
     {
+        document.body.classList.add("connected");
+        this.updateStatus("Connecting...");
         this.wuSocket.Connect();
+    }
+
+    private leave(): void
+    {
+        document.body.classList.remove("connected");
+        document.body.classList.remove("playing");
+        this.connectionState = ConnectionState.Disconnected;
+        this.wuSocket.Disconnect();
+    }
+
+    private updateExpirationTimer(): void
+    {
+        if (this.expirationTime)
+        {
+            let totalSeconds = Math.floor(((this.expirationTime.getTime()) - (new Date().getTime())) / 1000);
+            if (totalSeconds <= 0)
+            {
+                this.updateSubStatus(`Time is up!`);
+                this.expirationTime = null;
+            }
+            else
+            {
+                let minutes = Math.floor(totalSeconds / 60);
+                let seconds = totalSeconds % 60;
+                let timestamp = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+                this.updateSubStatus(`Time left: ${timestamp}`);
+                setTimeout(() => this.updateExpirationTimer(), 1000);
+            }
+        }
+    }
+    
+    private onWuSocketMessage(messageEvent: MessageEvent): void
+    {
+        let payload = messageEvent.data as string;
+        try
+        {
+            let parsed = JSON.parse(payload);
+            if (Number.isFinite(parsed.eventKind))
+            {
+                let event = parsed as ServerEvent;
+                switch (event.eventKind)
+                {
+                    case ServerEventKind.QueueUpdate:
+                        let queuePosition = event.queuePosition as number;
+                        this.updateStatus(`Waiting to Play...`)
+                        this.updateSubStatus(`Queue Position: ${queuePosition + 1}`);
+                        break;
+                    case ServerEventKind.YouArePlaying:
+                        let controllerNumber = event.controllerNumber as number;
+                        this.updateStatus(`You are P${controllerNumber + 1}!`);
+                        if (event.expirationTime && event.expirationTime !== "")
+                        {
+                            this.expirationTime = new Date(event.expirationTime);
+                            this.updateExpirationTimer();
+                        }
+                        else
+                        {
+                            this.expirationTime = null;
+                            this.updateSubStatus(`No time limit :)`);
+                        }
+                        this.connectionState = ConnectionState.Playing;
+                        document.body.classList.add("playing");
+                        break;
+                    case ServerEventKind.Dropped:
+                        this.leave();
+                        break;
+                    default:
+                        console.warn(`Unexpected server event '${event.eventKind}'.`);
+                }
+            }
+        }
+        catch (e)
+        {
+            console.error(`Couldn't parse payload from server:\n${e}`);
+        }
+    }
+
+    private onWuSocketOpen(): void
+    {
+        this.connectionState = ConnectionState.Connected;
+        this.updateStatus("Connected!");
+        // Request to put us in the queue
+        this.sendRequest({
+            requestKind: ClientRequestKind.EnterQueue
+        });
+    }
+
+    private sendRequest(request: ClientRequest): void
+    {
+        let payload = JSON.stringify(request);
+        this.wuSocket.sendMessage(payload);
     }
 
     private onFrame(): void
@@ -73,7 +222,7 @@ export default class Client
         if (elapsed > Client.FPS_INTERVAL)
         {
             // SEND UPDATE HERE
-            if (this.connectionState != ConnectionState.Disconnected)
+            if (this.connectionState === ConnectionState.Playing)
             {
                 this.wuSocket.sendBuffer(Controller.ButtonsToBuffer(this.controller.N64Buttons));
             }
@@ -86,7 +235,7 @@ export default class Client
         // Analog stick
         let analogStick: SVGPathElement = controllerSvgElement.querySelector("#analogStick") as SVGPathElement;
         analogStick.style.transform = `translate(${buttons.xAxis * 3}px, ${buttons.yAxis * 3}px)`;
-        if ((Math.abs(buttons.xAxis) > 0.01) || (Math.abs(buttons.yAxis) > 0.01))
+        if ((Math.abs(buttons.xAxis) > 0.3) || (Math.abs(buttons.yAxis) > 0.3))
         {
             analogStick.style.fill = "var(--button-highlight-color)";
         }

@@ -48,6 +48,19 @@
                 align-items: center;
                 flex-direction: column;
             }
+                body div#status {
+                    display: none;
+                }
+                body div#status > .sub {
+                    font-size: 10px;
+                }
+                body.connected div#status {
+                    display: block;
+                }
+                body.connected button#joinButton {
+                    display: none;
+                }
+
             body > iframe {
                 flex-grow: 1;
                 width: 100%;
@@ -60,6 +73,12 @@
                 min-height: 64px;
                 width: 100%;
             }
+                body.connected > nav {
+                    background-color: #32213d;
+                }
+                body.playing > nav {
+                    background-color: #213d23;
+                }
                 body > nav > div.left {
                     margin-left: 16px;
                     width: 100%;
@@ -149,6 +168,10 @@
                 <button id="refreshMixerButton">Refresh Stream</button>
             </div>
             <div class="right">
+                <div id="status">
+                    <div class="main"></div>
+                    <div class="sub"></div>
+                </div>
                 <button id="joinButton">Join!</button>
             </div>
         </nav>

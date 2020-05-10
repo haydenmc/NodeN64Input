@@ -1,19 +1,19 @@
 export default class WuSocket
 {
     public  OnOpen: (() => void) | null;
+    public  OnMessage: ((messageEvent: MessageEvent) => void) | null;
     private address: string;
     private peer: RTCPeerConnection | null;
     private channel: RTCDataChannel | null;
-    private onMessage: ((messageEvent: MessageEvent) => void) | null;
     private open: boolean;
 
     constructor(address: string)
     {
         this.OnOpen = null;
+        this.OnMessage = null;
         this.address = address;
         this.peer = null;
         this.channel = null;
-        this.onMessage = null;
         this.open = false;
     }
 
@@ -22,6 +22,17 @@ export default class WuSocket
         if (!this.open)
         {
             this.beginConnection();
+        }
+    }
+
+    public Disconnect(): void
+    {
+        if (this.open)
+        {
+            this.channel?.close();
+            this.peer?.close();
+            this.channel = null;
+            this.peer = null;
         }
     }
 
@@ -94,9 +105,9 @@ export default class WuSocket
 
         this.channel.onmessage = (e) =>
             {
-                if (this.onMessage != null)
+                if (this.OnMessage != null)
                 {
-                    this.onMessage(e);
+                    this.OnMessage(e);
                 }
             };
 

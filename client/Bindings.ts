@@ -33,6 +33,20 @@ export abstract class DefaultBindings {
                 }]
             ],
             [
+                N64ButtonKind.L_TRIG,
+                [{
+                    kind: ControlBindingKind.KeyboardKey,
+                    keyboardKey: "h"
+                }]
+            ],
+            [
+                N64ButtonKind.R_TRIG,
+                [{
+                    kind: ControlBindingKind.KeyboardKey,
+                    keyboardKey: "l"
+                }]
+            ],
+            [
                 N64ButtonKind.U_CBUTTON,
                 [{
                     kind: ControlBindingKind.KeyboardKey,
@@ -58,6 +72,40 @@ export abstract class DefaultBindings {
                 [{
                     kind: ControlBindingKind.KeyboardKey,
                     keyboardKey: "ArrowRight"
+                }]
+            ],
+            [
+                N64ButtonKind.U_DPAD,
+                [{
+                    kind: ControlBindingKind.KeyboardKey,
+                    keyboardKey: "8"
+                }]
+            ],
+            [
+                N64ButtonKind.D_DPAD,
+                [
+                    {
+                        kind: ControlBindingKind.KeyboardKey,
+                        keyboardKey: "5"
+                    },
+                    {
+                        kind: ControlBindingKind.KeyboardKey,
+                        keyboardKey: "2"
+                    }
+                ]
+            ],
+            [
+                N64ButtonKind.L_DPAD,
+                [{
+                    kind: ControlBindingKind.KeyboardKey,
+                    keyboardKey: "4"
+                }]
+            ],
+            [
+                N64ButtonKind.R_DPAD,
+                [{
+                    kind: ControlBindingKind.KeyboardKey,
+                    keyboardKey: "6"
                 }]
             ],
         ]),

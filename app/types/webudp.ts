@@ -33,7 +33,7 @@ export interface WebUdpHost
     onClientJoin(
         callback: (
             client: { 
-                clientId: string,
+                clientId: number,
                 address: string, 
                 port: number 
             }
@@ -43,7 +43,7 @@ export interface WebUdpHost
     onClientLeave(
         callback: (
             client: {
-                clientId:string
+                clientId:number
             }
         ) => void
     ): void;
@@ -52,30 +52,28 @@ export interface WebUdpHost
         callback: (
             payload: {
                 text: string,
-                clientId: string,
+                clientId: number,
                 address: string,
                 port: number
             }
         ) => void
     ): void;
 
-    // TODO
     onBinaryData(
         callback: (
             payload: {
                 data: ArrayBuffer,
-                clientId: string,
+                clientId: number,
                 address: string,
                 port: number
             }
         ) => void
     ): void;
 
-    // TODO
-    removeClient(): void;
+    removeClient(clientId: number): void;
 
     sendText(
-        clientId: string,
+        clientId: number,
         text: string
     ): void;
 
