@@ -64,6 +64,13 @@ export default class Client
     constructor()
     {
         this.controller = new Controller();
+        this.controller.OnGamepadChanged = (gamepadName: string) => {
+            let nameElement = document.querySelector("span#detectedGamepadName");
+            if (nameElement)
+            {
+                nameElement.innerHTML = gamepadName;
+            }
+        };
         this.wuSocket = new WuSocket(
             `${window.location.protocol}//${window.location.hostname}:${window.location.port}`);
         this.connectionState = ConnectionState.Disconnected;
@@ -78,6 +85,15 @@ export default class Client
         this.lastUpdateTime = 0;
     }
 
+    private resetFocusIfPlaying(): void
+    {
+        if (this.connectionState === ConnectionState.Playing)
+        {
+            document.body.focus();
+            window.focus();
+        }
+    }
+
     public Start(): void
     {
         this.bindElements();
@@ -86,6 +102,7 @@ export default class Client
             this.initMixer();
         }
         window.requestAnimationFrame(() => this.onFrame());
+        setInterval(() => this.resetFocusIfPlaying(), 6000);
     }
 
     private updateStatus(message: string): void
@@ -336,6 +353,14 @@ export default class Client
             e.preventDefault();
             this.hideDialog("joinDialog");
             this.join();
+        });
+
+        // Leave
+        document.querySelector("button#leaveButton")?.addEventListener("click", (e) => {
+            e.preventDefault();
+            this.sendRequest({
+                requestKind: ClientRequestKind.Leave
+            });
         });
     }
 

@@ -32,10 +32,22 @@
             }
 
             /* Styles */
+            h1, h2, h3 {
+                font-weight: normal;
+            }
+
+            h1 {
+                font-size: 28px;
+            }
+            h2 {
+                font-size: 20px;
+            }
+
             body {
                 background-color: #212c3d;
                 color: rgba(255, 255, 255, 0.90);
                 font-family: "Press Start 2P", sans-serif;
+                line-height: 1.25;
                 display: flex;
                 position: absolute;
                 top: 0;
@@ -50,15 +62,22 @@
             }
                 body div#status {
                     display: none;
+                    margin-right: 16px;
                 }
                 body div#status > .sub {
                     font-size: 10px;
+                }
+                body button#leaveButton {
+                    display: none;
                 }
                 body.connected div#status {
                     display: block;
                 }
                 body.connected button#joinButton {
                     display: none;
+                }
+                body.connected button#leaveButton {
+                    display: block;
                 }
 
             body > iframe {
@@ -156,6 +175,13 @@
                     background-color: #ffffff;
                     color: #000000;
                 }
+
+            table {
+                font-size: 14px;
+            }
+                table tr > td:first-child {
+                    padding-right: 32px;
+                }
         </style>
     </head>
     <body>
@@ -173,6 +199,7 @@
                     <div class="sub"></div>
                 </div>
                 <button id="joinButton">Join!</button>
+                <button id="leaveButton">Leave</button>
             </div>
         </nav>
         <iframe
@@ -194,14 +221,58 @@
                     Depending on demand, you may need to wait a bit to join in. Until then, you
                     can watch the other players!
                 </p>
+                <p>
+                    Experiencing latency problems? Try the "refresh stream" button.
+                </p>
                 <button id="closeAboutDialog">Cool!</button>
             </div>
         </div>
         <div id="joinDialog" class="dialog">
             <div class="content">
                 <h1>Ready to Play?</h1>
-                <p>Test out your controller here.</p>
-                <p>When it looks like it's working, press the Join button to play!</p>
+                <p>Test out your controller here, then press "Join!"</p>
+                <p>Detected GamePad: <span id="detectedGamepadName">None</span>.</p>
+                <h2>Keyboard Controls</h2>
+                <table>
+                    <tbody>
+                        <tr>
+                            <td>Analog Stick</td>
+                            <td>W, A, S, D keys</td>
+                        </tr>
+                        <tr>
+                            <td>Start Button</td>
+                            <td>Enter key</td>
+                        </tr>
+                        <tr>
+                            <td>A Button</td>
+                            <td>J key</td>
+                        </tr>
+                        <tr>
+                            <td>B Button</td>
+                            <td>K key</td>
+                        </tr>
+                        <tr>
+                            <td>Z Trigger</td>
+                            <td>Space key</td>
+                        </tr>
+                        <tr>
+                            <td>L Trigger</td>
+                            <td>H key</td>
+                        </tr>
+                        <tr>
+                            <td>R Trigger</td>
+                            <td>L key</td>
+                        </tr>
+                        <tr>
+                            <td>C Buttons</td>
+                            <td>Arrow keys</td>
+                        </tr>
+                        <tr>
+                            <td>D Pad</td>
+                            <td>Numpad 8, 4, 5, 6</td>
+                        </tr>
+                    </tbody>
+                </table>
                 <div class="controller">
                     <svg
                         xmlns:dc="http://purl.org/dc/elements/1.1/" 

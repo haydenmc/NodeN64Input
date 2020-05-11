@@ -65,6 +65,8 @@ export class Controller
         return this.n64Buttons;
     }
 
+    public OnGamepadChanged: ((gamepadName: string) => void) | null;
+
     private static readonly AXIS_PRESSED_THRESHOLD: number = 0.33;
     private static readonly ANALOG_DEADZONE: number = 0.20;
 
@@ -78,6 +80,7 @@ export class Controller
 
     constructor()
     {
+        this.OnGamepadChanged = null;
         this.gamepadIndex = -1;
         this.gamepadActive = false;
         this.n64Buttons = 
@@ -199,6 +202,10 @@ export class Controller
         }
         this.gamepadIndex = gamepad.index;
         console.log("Gamepad connected: %s", gamepad.id);
+        if (this.OnGamepadChanged !== null)
+        {
+            this.OnGamepadChanged(gamepad.id);
+        }
         if (!this.gamepadActive)
         {
             this.gamepadActive = true;
@@ -207,7 +214,17 @@ export class Controller
 
     private onGamepadDisconnected(event: GamepadEvent): void
     {
-        // todo
+        let gamepad = event.gamepad;
+        console.log("Gamepad disconnected: %s", gamepad.id);
+        if (this.gamepadIndex === gamepad.index)
+        {
+            this.gamepadIndex = -1;
+            this.gamepadActive = false;
+            if (this.OnGamepadChanged)
+            {
+                this.OnGamepadChanged("None");
+            }
+        }
     }
 
     public UpdateControllerState(): void
@@ -350,6 +367,8 @@ export class Controller
                         break;
                 }
             }
+            // Clamp axis value
+            bindingValue = Math.min(Math.max(bindingValue, -1.0), 1.0);
             if (axis === 0)
             {
                 this.n64Buttons.xAxis = bindingValue;
